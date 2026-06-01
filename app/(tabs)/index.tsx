@@ -30,28 +30,18 @@ export default function HomeScreen() {
   const firstName = displayName ? displayName.split(' ')[0] : 'there';
   const myMember = members.find((m) => m.uid === uid);
 
-  // Determine if current user has paid — handle both fromUserId and memberId (demo cast)
   const hasPaid = currentBill
-    ? payments.some((p) => {
-        const raw = p as unknown as Record<string, unknown>;
-        const payer = (raw.fromUserId ?? raw.memberId) as string | undefined;
-        return payer === uid && p.billId === currentBill.id;
-      })
+    ? payments.some((p) => p.fromUserId === uid && p.billId === currentBill.id)
     : false;
 
-  // Roommate paid status
   const roommateStatuses = members
     .filter((m) => m.uid !== uid)
-    .map((m) => {
-      const paid = currentBill
-        ? payments.some((p) => {
-            const raw = p as unknown as Record<string, unknown>;
-            const payer = (raw.fromUserId ?? raw.memberId) as string | undefined;
-            return payer === m.uid && p.billId === currentBill.id;
-          })
-        : false;
-      return { ...m, paid };
-    });
+    .map((m) => ({
+      ...m,
+      paid: currentBill
+        ? payments.some((p) => p.fromUserId === m.uid && p.billId === currentBill.id)
+        : false,
+    }));
 
   const daysUntil = currentBill ? getDaysUntil(currentBill.dueDate) : 0;
   const countdownColor =

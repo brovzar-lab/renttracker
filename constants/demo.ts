@@ -23,11 +23,12 @@ export type PaymentMethod = 'venmo' | 'zelle' | 'cash' | 'check' | 'other';
 export interface Payment {
   id: string;
   billId: string;
-  memberId: string;
+  fromUserId: string;
+  fromDisplayName: string;
   amount: number;
   method: PaymentMethod;
-  paidAt: string;
-  note?: string;
+  confirmedAt: string;
+  createdAt: string;
 }
 
 export interface Bill {
@@ -162,21 +163,21 @@ export const DEMO_CURRENT_BILL = DEMO_BILLS[DEMO_BILLS.length - 1];
 
 export const DEMO_PAYMENTS: Payment[] = [
   // February 2026
-  { id: 'pay-1',  billId: 'bill-1', memberId: 'demo-user-001', amount: 1440, method: 'venmo', paidAt: '2026-02-01T10:00:00Z' },
-  { id: 'pay-2',  billId: 'bill-1', memberId: 'demo-user-002', amount: 1260, method: 'zelle', paidAt: '2026-02-01T11:00:00Z' },
-  { id: 'pay-3',  billId: 'bill-1', memberId: 'demo-user-003', amount:  900, method: 'venmo', paidAt: '2026-02-02T09:00:00Z' },
+  { id: 'pay-1',  billId: 'bill-1', fromUserId: 'demo-user-001', fromDisplayName: 'Alex Chen',   amount: 1440, method: 'venmo', confirmedAt: '2026-02-01T10:00:00Z', createdAt: '2026-02-01T10:00:00Z' },
+  { id: 'pay-2',  billId: 'bill-1', fromUserId: 'demo-user-002', fromDisplayName: 'Jordan',       amount: 1260, method: 'zelle', confirmedAt: '2026-02-01T11:00:00Z', createdAt: '2026-02-01T11:00:00Z' },
+  { id: 'pay-3',  billId: 'bill-1', fromUserId: 'demo-user-003', fromDisplayName: 'Sam',          amount:  900, method: 'venmo', confirmedAt: '2026-02-02T09:00:00Z', createdAt: '2026-02-02T09:00:00Z' },
   // March 2026
-  { id: 'pay-4',  billId: 'bill-2', memberId: 'demo-user-001', amount: 1440, method: 'venmo', paidAt: '2026-03-01T10:00:00Z' },
-  { id: 'pay-5',  billId: 'bill-2', memberId: 'demo-user-002', amount: 1260, method: 'zelle', paidAt: '2026-03-01T12:00:00Z' },
-  { id: 'pay-6',  billId: 'bill-2', memberId: 'demo-user-003', amount:  900, method: 'cash',  paidAt: '2026-03-02T08:30:00Z' },
+  { id: 'pay-4',  billId: 'bill-2', fromUserId: 'demo-user-001', fromDisplayName: 'Alex Chen',   amount: 1440, method: 'venmo', confirmedAt: '2026-03-01T10:00:00Z', createdAt: '2026-03-01T10:00:00Z' },
+  { id: 'pay-5',  billId: 'bill-2', fromUserId: 'demo-user-002', fromDisplayName: 'Jordan',       amount: 1260, method: 'zelle', confirmedAt: '2026-03-01T12:00:00Z', createdAt: '2026-03-01T12:00:00Z' },
+  { id: 'pay-6',  billId: 'bill-2', fromUserId: 'demo-user-003', fromDisplayName: 'Sam',          amount:  900, method: 'cash',  confirmedAt: '2026-03-02T08:30:00Z', createdAt: '2026-03-02T08:30:00Z' },
   // April 2026
-  { id: 'pay-7',  billId: 'bill-3', memberId: 'demo-user-001', amount: 1440, method: 'venmo', paidAt: '2026-04-01T10:00:00Z' },
-  { id: 'pay-8',  billId: 'bill-3', memberId: 'demo-user-002', amount: 1260, method: 'zelle', paidAt: '2026-04-01T11:30:00Z' },
-  { id: 'pay-9',  billId: 'bill-3', memberId: 'demo-user-003', amount:  900, method: 'venmo', paidAt: '2026-04-01T14:00:00Z' },
+  { id: 'pay-7',  billId: 'bill-3', fromUserId: 'demo-user-001', fromDisplayName: 'Alex Chen',   amount: 1440, method: 'venmo', confirmedAt: '2026-04-01T10:00:00Z', createdAt: '2026-04-01T10:00:00Z' },
+  { id: 'pay-8',  billId: 'bill-3', fromUserId: 'demo-user-002', fromDisplayName: 'Jordan',       amount: 1260, method: 'zelle', confirmedAt: '2026-04-01T11:30:00Z', createdAt: '2026-04-01T11:30:00Z' },
+  { id: 'pay-9',  billId: 'bill-3', fromUserId: 'demo-user-003', fromDisplayName: 'Sam',          amount:  900, method: 'venmo', confirmedAt: '2026-04-01T14:00:00Z', createdAt: '2026-04-01T14:00:00Z' },
   // May 2026
-  { id: 'pay-10', billId: 'bill-4', memberId: 'demo-user-001', amount: 1440, method: 'venmo', paidAt: '2026-05-01T09:00:00Z' },
-  { id: 'pay-11', billId: 'bill-4', memberId: 'demo-user-002', amount: 1260, method: 'zelle', paidAt: '2026-05-01T10:00:00Z' },
-  { id: 'pay-12', billId: 'bill-4', memberId: 'demo-user-003', amount:  900, method: 'venmo', paidAt: '2026-05-02T08:00:00Z' },
+  { id: 'pay-10', billId: 'bill-4', fromUserId: 'demo-user-001', fromDisplayName: 'Alex Chen',   amount: 1440, method: 'venmo', confirmedAt: '2026-05-01T09:00:00Z', createdAt: '2026-05-01T09:00:00Z' },
+  { id: 'pay-11', billId: 'bill-4', fromUserId: 'demo-user-002', fromDisplayName: 'Jordan',       amount: 1260, method: 'zelle', confirmedAt: '2026-05-01T10:00:00Z', createdAt: '2026-05-01T10:00:00Z' },
+  { id: 'pay-12', billId: 'bill-4', fromUserId: 'demo-user-003', fromDisplayName: 'Sam',          amount:  900, method: 'venmo', confirmedAt: '2026-05-02T08:00:00Z', createdAt: '2026-05-02T08:00:00Z' },
   // June 2026 — Alex only so far
-  { id: 'pay-13', billId: 'bill-5', memberId: 'demo-user-001', amount: 1440, method: 'venmo', paidAt: '2026-06-01T09:30:00Z' },
+  { id: 'pay-13', billId: 'bill-5', fromUserId: 'demo-user-001', fromDisplayName: 'Alex Chen',   amount: 1440, method: 'venmo', confirmedAt: '2026-06-01T09:30:00Z', createdAt: '2026-06-01T09:30:00Z' },
 ];

@@ -89,14 +89,12 @@ export default function RootLayout() {
 
           loginPurchases(firebaseUser.uid).catch(console.error);
 
-          // ── 2. Load first household ────────────────────────────────────────
-          const householdsSnap = await getDocs(
-            collection(db, `users/${firebaseUser.uid}/households`)
-          );
+          // ── 2. Load first household (ids stored on user doc) ──────────────
+          const householdIds: string[] = (profileSnap.exists() ? profileSnap.data().householdIds : []) ?? [];
+          const firstHid = householdIds[0];
 
-          if (!householdsSnap.empty) {
-            const firstDoc = householdsSnap.docs[0];
-            const householdRef = doc(db, `households/${firstDoc.id}`);
+          if (firstHid) {
+            const householdRef = doc(db, `households/${firstHid}`);
             const householdSnap = await getDoc(householdRef);
 
             if (householdSnap.exists()) {

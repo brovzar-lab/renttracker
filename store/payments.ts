@@ -1,18 +1,8 @@
 import { create } from 'zustand';
 import { DEMO_PAYMENTS, IS_DEMO } from '../constants/demo';
+import type { Payment, PaymentMethod } from '../constants/demo';
 
-export type { PaymentMethod } from '../constants/demo';
-
-export interface Payment {
-  id: string;
-  fromUserId: string;
-  fromDisplayName: string;
-  amount: number;
-  confirmedAt: string;
-  billId: string;
-  method: import('../constants/demo').PaymentMethod;
-  createdAt: string;
-}
+export type { Payment, PaymentMethod };
 
 interface PaymentsState {
   payments: Payment[];
@@ -24,15 +14,16 @@ interface PaymentsState {
 }
 
 export const usePaymentsStore = create<PaymentsState>((set, get) => ({
-  payments: IS_DEMO ? (DEMO_PAYMENTS as unknown as Payment[]) : [],
+  payments: IS_DEMO ? DEMO_PAYMENTS : [],
 
   setPayments: (payments) => set({ payments }),
 
   addPayment: (payment) => {
+    const ts = new Date().toISOString();
     const newPayment: Payment = {
       ...payment,
-      id: `pay-${Date.now()}`,
-      createdAt: new Date().toISOString(),
+      id: 'pay-' + Date.now().toString(),
+      createdAt: ts,
     };
     set((s) => ({ payments: [newPayment, ...s.payments] }));
     return newPayment;

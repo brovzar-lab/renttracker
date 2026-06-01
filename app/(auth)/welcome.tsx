@@ -39,7 +39,7 @@ export default function WelcomeScreen() {
     setMembers(DEMO_MEMBERS);
     setBills(DEMO_BILLS);
     setCurrentBill(DEMO_CURRENT_BILL);
-    setPayments(DEMO_PAYMENTS as any);
+    setPayments(DEMO_PAYMENTS);
   };
 
   return (

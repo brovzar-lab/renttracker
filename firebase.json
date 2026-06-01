@@ -1,0 +1,22 @@
+{
+  "functions": [
+    {
+      "source": "functions",
+      "codebase": "renttracker",
+      "ignore": ["node_modules", ".git", "firebase-debug.log", "firebase-debug.*.log", "*.local"]
+    }
+  ],
+  "firestore": {
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json"
+  },
+  "storage": {
+    "rules": "storage.rules"
+  },
+  "emulators": {
+    "functions": { "port": 5004 },
+    "firestore": { "port": 8083 },
+    "storage": { "port": 9199 },
+    "ui": { "enabled": true, "port": 4003 }
+  }
+}

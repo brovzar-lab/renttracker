@@ -1,8 +1,12 @@
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Alert, Share } from 'react-native';
+import { useState } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Alert, Share, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import * as Linking from 'expo-linking';
+import { httpsCallable } from 'firebase/functions';
 import { Colors } from '../../constants/colors';
 import { IS_DEMO } from '../../constants/demo';
 import DemoBadge from '../../components/DemoBadge';
+import { functions } from '../../lib/firebase';
 import { useLeaseStore } from '../../store/lease';
 import { usePaymentsStore } from '../../store/payments';
 import { useAuthStore } from '../../store/auth';
@@ -19,16 +23,38 @@ export default function ExportScreen() {
   const displayName = useAuthStore((s) => s.displayName);
   const lease = useLeaseStore((s) => s.lease);
   const payments = usePaymentsStore((s) => s.payments);
+  const [exporting, setExporting] = useState(false);
 
   const onTimeCount = payments.filter((p) => p.status === 'on_time').length;
   const totalPaid = payments.reduce((sum, p) => sum + p.amount, 0);
 
-  function handleExportPDF() {
+  async function handleExportPDF() {
     if (IS_DEMO) {
       Alert.alert('Demo Mode', 'Demo mode — PDF not generated');
       return;
     }
-    Alert.alert('Export PDF', 'PDF export requires a live account connection.');
+    if (!lease || !functions) return;
+
+    setExporting(true);
+    try {
+      const today = new Date().toISOString().slice(0, 10);
+      const generateExport = httpsCallable<
+        { leaseId: string; dateRange: { from: string; to: string } },
+        { downloadUrl: string }
+      >(functions, 'generateExport');
+
+      const result = await generateExport({
+        leaseId: lease.id,
+        dateRange: { from: lease.leaseStart, to: today },
+      });
+
+      await Linking.openURL(result.data.downloadUrl);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Could not generate PDF.';
+      Alert.alert('Export Failed', msg);
+    } finally {
+      setExporting(false);
+    }
   }
 
   function handleShareSummary() {
@@ -118,10 +144,14 @@ export default function ExportScreen() {
         {/* Action buttons */}
         <Text style={styles.sectionLabel}>EXPORT OPTIONS</Text>
 
-        <TouchableOpacity style={styles.primaryBtn} onPress={handleExportPDF}>
-          <Text style={styles.primaryBtnIcon}>📄</Text>
+        <TouchableOpacity style={styles.primaryBtn} onPress={handleExportPDF} disabled={exporting}>
+          {exporting ? (
+            <ActivityIndicator color={Colors.white} style={{ width: 28 }} />
+          ) : (
+            <Text style={styles.primaryBtnIcon}>📄</Text>
+          )}
           <View>
-            <Text style={styles.primaryBtnText}>Export PDF Report</Text>
+            <Text style={styles.primaryBtnText}>{exporting ? 'Generating PDF…' : 'Export PDF Report'}</Text>
             <Text style={styles.primaryBtnSub}>Full payment history as PDF</Text>
           </View>
         </TouchableOpacity>

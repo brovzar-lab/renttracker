@@ -59,6 +59,24 @@ service cloud.firestore {
       }
     }
 
+    // ── leases/{leaseId} ───────────────────────────────────────────────────
+    match /leases/{leaseId} {
+      allow read, write: if request.auth != null
+        && (
+          // existing doc: owner matches
+          (resource != null && resource.data.userId == request.auth.uid)
+          ||
+          // new doc being created: incoming userId matches caller
+          (resource == null && request.resource.data.userId == request.auth.uid)
+        );
+
+      // ── leases/{leaseId}/payments/{paymentId} ──────────────────────────
+      match /payments/{paymentId} {
+        allow read, write: if request.auth != null
+          && get(/databases/$(database)/documents/leases/$(leaseId)).data.userId == request.auth.uid;
+      }
+    }
+
     // ── catch-all: deny everything else ────────────────────────────────────
     match /{document=**} {
       allow read, write: if false;

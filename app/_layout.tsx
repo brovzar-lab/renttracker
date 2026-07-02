@@ -8,6 +8,7 @@ import { onAuthStateChanged } from 'firebase/auth';
 import { Colors } from '../constants/colors';
 import { IS_DEMO } from '../constants/demo';
 import { auth } from '../lib/firebase';
+import { registerPushToken } from '../lib/notifications';
 import { useAuthStore } from '../store/auth';
 
 // ─── AuthGate ─────────────────────────────────────────────────────────────────
@@ -46,6 +47,7 @@ export default function RootLayout() {
           displayName: firebaseUser.displayName ?? null,
           isAuthenticated: true,
         });
+        registerPushToken(firebaseUser.uid).catch(() => null);
       } else {
         setUser({ uid: null, email: null, isAuthenticated: false });
       }

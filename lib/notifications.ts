@@ -1,4 +1,7 @@
+import { doc, updateDoc } from 'firebase/firestore';
 import * as Notifications from 'expo-notifications';
+import Constants from 'expo-constants';
+import { db } from './firebase';
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -13,6 +16,17 @@ export async function requestNotificationPermissions(): Promise<boolean> {
   if (existing === 'granted') return true;
   const { status } = await Notifications.requestPermissionsAsync();
   return status === 'granted';
+}
+
+export async function registerPushToken(uid: string): Promise<void> {
+  if (!db) return;
+  const granted = await requestNotificationPermissions();
+  if (!granted) return;
+
+  const projectId = Constants.expoConfig?.extra?.eas?.projectId as string | undefined;
+  const token = await Notifications.getExpoPushTokenAsync(projectId ? { projectId } : undefined);
+
+  await updateDoc(doc(db, 'users', uid), { pushToken: token.data });
 }
 
 export async function scheduleRentReminder(

@@ -133,6 +133,7 @@ export const sendRentReminders = functions.pubsub
     functions.logger.info('[sendRentReminders] Starting job');
 
     const today = new Date();
+    today.setHours(0, 0, 0, 0);
     const todayDay = today.getDate();
 
     const leasesSnap = await db.collection('leases').get();
@@ -145,8 +146,19 @@ export const sendRentReminders = functions.pubsub
 
         if (leaseEnd && new Date(leaseEnd) < today) return;
 
-        const daysUntilDue = dueDay - todayDay;
-        if (daysUntilDue < 0) return;
+        // Compute next due date with month-rollover support.
+        // Naive subtraction (dueDay - todayDay) goes negative in the final week
+        // of any month when dueDay falls in the first days of the next month.
+        const year = today.getFullYear();
+        const month = today.getMonth();
+        const dueDayThisMonth = Math.min(dueDay, new Date(year, month + 1, 0).getDate());
+        const nextDueDate =
+          dueDayThisMonth >= todayDay
+            ? new Date(year, month, dueDayThisMonth)
+            : new Date(year, month + 1, Math.min(dueDay, new Date(year, month + 2, 0).getDate()));
+        const daysUntilDue = Math.round(
+          (nextDueDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
+        );
 
         const userSnap = await db.collection('users').doc(userId).get();
         if (!userSnap.exists) return;

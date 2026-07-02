@@ -31,14 +31,14 @@ export async function createUserProfile(
 }
 
 // ---------------------------------------------------------------------------
-// Leases
+// Leases  (root leases/ collection — Cloud Functions query here)
 // ---------------------------------------------------------------------------
 
 export async function saveLease(uid: string, lease: Omit<Lease, 'id' | 'tenantId' | 'createdAt'>): Promise<string> {
   assertDb(db);
-  const ref = await addDoc(collection(db, `users/${uid}/leases`), {
+  const ref = await addDoc(collection(db, 'leases'), {
     ...lease,
-    tenantId: uid,
+    userId: uid,
     createdAt: serverTimestamp(),
   });
   return ref.id;
@@ -46,11 +46,11 @@ export async function saveLease(uid: string, lease: Omit<Lease, 'id' | 'tenantId
 
 export async function updateLease(uid: string, leaseId: string, updates: Partial<Lease>): Promise<void> {
   assertDb(db);
-  await updateDoc(doc(db, `users/${uid}/leases/${leaseId}`), updates);
+  await updateDoc(doc(db, 'leases', leaseId), updates);
 }
 
 // ---------------------------------------------------------------------------
-// Payments
+// Payments  (leases/{leaseId}/payments/ — Cloud Functions query here)
 // ---------------------------------------------------------------------------
 
 export async function recordPayment(
@@ -58,7 +58,7 @@ export async function recordPayment(
   payment: Omit<PaymentRecord, 'id' | 'createdAt'>
 ): Promise<string> {
   assertDb(db);
-  const ref = await addDoc(collection(db, `users/${uid}/payments`), {
+  const ref = await addDoc(collection(db, 'leases', payment.leaseId, 'payments'), {
     ...payment,
     createdAt: serverTimestamp(),
   });

@@ -6,9 +6,7 @@ interface AuthState {
   displayName: string | null;
   isAuthenticated: boolean;
   isPro: boolean;
-  notificationsEnabled: boolean;
-  reminderDays: number[];
-  householdId: string | null;
+  leaseId: string | null;
 
   setUser: (user: Partial<Omit<AuthState, 'setUser' | 'signOut'>>) => void;
   signOut: () => void;
@@ -20,9 +18,7 @@ const initialState: Omit<AuthState, 'setUser' | 'signOut'> = {
   displayName: null,
   isAuthenticated: false,
   isPro: false,
-  notificationsEnabled: false,
-  reminderDays: [3],
-  householdId: null,
+  leaseId: null,
 };
 
 export const useAuthStore = create<AuthState>((set) => ({

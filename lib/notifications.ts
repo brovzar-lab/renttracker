@@ -28,11 +28,11 @@ export async function scheduleRentReminder(
       body: `Your rent of $${monthlyRent.toLocaleString()} is due in ${reminderDaysBefore} days.`,
     },
     trigger: {
-      type: Notifications.SchedulableTriggerInputTypes.MONTHLY,
       day: triggerDay,
       hour: 9,
       minute: 0,
-    },
+      repeats: true,
+    } as Notifications.CalendarTriggerInput,
   });
 }
 

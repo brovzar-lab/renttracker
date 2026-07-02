@@ -1,197 +1,292 @@
 import { useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Alert, Linking, ScrollView } from 'react-native';
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  ScrollView,
+  Alert,
+  Image,
+  Modal,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Colors } from '../../constants/colors';
 import { IS_DEMO } from '../../constants/demo';
 import DemoBadge from '../../components/DemoBadge';
-import PaywallModal from '../../components/PaywallModal';
-import { useAuthStore } from '../../store/auth';
-import { useHouseholdStore } from '../../store/household';
+import { useLeaseStore } from '../../store/lease';
 import { usePaymentsStore } from '../../store/payments';
-import { recordPayment } from '../../lib/firestore';
-import type { PaymentMethod } from '../../store/payments';
+import type { PaymentRecord, PaymentMethod } from '../../store/payments';
 
-const AVATAR_PALETTE = ['#6366f1', '#f59e0b', '#10b981', '#ef4444', '#8b5cf6'];
-function avatarColor(name: string): string {
-  let n = 0;
-  for (let i = 0; i < name.length; i++) n += name.charCodeAt(i);
-  return AVATAR_PALETTE[n % AVATAR_PALETTE.length];
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function fmtMonth(ym: string): string {
+  const [y, m] = ym.split('-');
+  return new Date(Number(y), Number(m) - 1).toLocaleDateString('en-US', {
+    month: 'long',
+    year: 'numeric',
+  });
 }
-function methodIcon(m: PaymentMethod) { return m === 'venmo' ? '💸' : m === 'zelle' ? '🏦' : m === 'cash' ? '💵' : '💳'; }
-function fmtDate(iso: string) { return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }); }
-function cutoffISO() { const d = new Date(); d.setMonth(d.getMonth() - 3); return d.toISOString(); }
+
+function fmtDate(iso: string): string {
+  return new Date(iso).toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
+}
+
+function methodLabel(m: PaymentMethod): string {
+  return m === 'venmo' ? 'Venmo' : m === 'zelle' ? 'Zelle' : m === 'cash' ? 'Cash' : m === 'check' ? 'Check' : 'Other';
+}
+
+function methodIcon(m: PaymentMethod): string {
+  return m === 'venmo' ? '💸' : m === 'zelle' ? '🏦' : m === 'cash' ? '💵' : m === 'check' ? '📝' : '💳';
+}
+
+// ─── Receipt Modal ────────────────────────────────────────────────────────────
+
+function ReceiptModal({ uri, visible, onClose }: { uri: string; visible: boolean; onClose: () => void }) {
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <TouchableOpacity style={rm.overlay} activeOpacity={1} onPress={onClose}>
+        <View style={rm.container}>
+          <Text style={rm.title}>Receipt</Text>
+          <Image source={{ uri }} style={rm.image} resizeMode="contain" />
+          <TouchableOpacity style={rm.closeBtn} onPress={onClose}>
+            <Text style={rm.closeBtnText}>Close</Text>
+          </TouchableOpacity>
+        </View>
+      </TouchableOpacity>
+    </Modal>
+  );
+}
+
+const rm = StyleSheet.create({
+  overlay: { flex: 1, backgroundColor: '#000000cc', justifyContent: 'center', alignItems: 'center', padding: 24 },
+  container: { backgroundColor: Colors.surface, borderRadius: 20, padding: 20, width: '100%', alignItems: 'center', gap: 16 },
+  title: { fontSize: 17, fontWeight: '700', color: Colors.text },
+  image: { width: '100%', height: 360, borderRadius: 12, backgroundColor: Colors.background },
+  closeBtn: { backgroundColor: Colors.primary, borderRadius: 12, paddingVertical: 12, paddingHorizontal: 32 },
+  closeBtnText: { color: Colors.white, fontWeight: '700', fontSize: 15 },
+});
+
+// ─── Payment Row ──────────────────────────────────────────────────────────────
+
+function PaymentRow({ payment, onReceiptTap }: { payment: PaymentRecord; onReceiptTap: (uri: string) => void }) {
+  return (
+    <View style={s.row}>
+      <View style={s.rowLeft}>
+        <View style={[s.statusDot, { backgroundColor: payment.status === 'on_time' ? Colors.success : Colors.danger }]} />
+        <View style={s.rowInfo}>
+          <Text style={s.rowMonth}>{fmtMonth(payment.month)}</Text>
+          <Text style={s.rowMeta}>
+            {methodIcon(payment.method)} {methodLabel(payment.method)} · {fmtDate(payment.paidDate)}
+          </Text>
+        </View>
+      </View>
+      <View style={s.rowRight}>
+        <Text style={s.rowAmount}>${payment.amount.toLocaleString()}</Text>
+        {payment.receiptUri ? (
+          <TouchableOpacity
+            style={s.receiptThumb}
+            onPress={() => onReceiptTap(payment.receiptUri!)}
+          >
+            <Image source={{ uri: payment.receiptUri }} style={s.receiptImage} />
+            <View style={s.receiptOverlay}>
+              <Text style={s.receiptLabel}>View</Text>
+            </View>
+          </TouchableOpacity>
+        ) : (
+          <View style={s.noReceipt}>
+            <Text style={s.noReceiptText}>No receipt</Text>
+          </View>
+        )}
+      </View>
+    </View>
+  );
+}
+
+// ─── Screen ───────────────────────────────────────────────────────────────────
 
 export default function PaymentsScreen() {
-  const uid          = useAuthStore((s) => s.uid);
-  const email        = useAuthStore((s) => s.email);
-  const displayName  = useAuthStore((s) => s.displayName);
-  const isPro        = useAuthStore((s) => s.isPro);
-  const household    = useHouseholdStore((s) => s.household);
-  const currentBill  = useHouseholdStore((s) => s.currentBill);
-  const members      = useHouseholdStore((s) => s.members);
-  const getMyShare   = useHouseholdStore((s) => s.getMyShare);
-  const { payments, addPayment, hasPaidBill } = usePaymentsStore();
+  const lease = useLeaseStore((s) => s.lease);
+  const { payments, addPayment, hasPaymentForMonth } = usePaymentsStore();
 
-  const [showPaywall,   setShowPaywall]   = useState(false);
-  const [hasTappedPay,  setHasTappedPay]  = useState(false);
-  const [lastPayMethod, setLastPayMethod] = useState<PaymentMethod | null>(null);
+  const [receiptUri, setReceiptUri] = useState<string | null>(null);
 
-  const myUid     = IS_DEMO ? 'demo-user-001' : (uid ?? '');
-  const myShare   = getMyShare(myUid);
-  const myName    = IS_DEMO ? 'Alex Chen' : (displayName ?? 'Me');
-  const ownerEmail = IS_DEMO ? 'landlord@example.com' : (email ?? '');
-  const billId    = currentBill?.id ?? '';
-  const isPaid    = billId ? hasPaidBill(myUid, billId) : false;
-  const dueLabel  = currentBill ? `${currentBill.month} — Due ${fmtDate(currentBill.dueDate)}` : 'No current bill';
+  const currentMonth = new Date().toISOString().slice(0, 7);
+  const currentMonthPaid = hasPaymentForMonth(currentMonth);
 
-  const cutoff  = cutoffISO();
-  const allDesc = [...payments].sort((a, b) => (b.confirmedAt ?? b.createdAt) > (a.confirmedAt ?? a.createdAt) ? 1 : -1);
-  const visible = isPro ? allDesc : allDesc.filter((p) => (p.confirmedAt ?? p.createdAt) >= cutoff);
-  const hasMore = !isPro && visible.length < allDesc.length;
-
-  async function doMarkPaid(method: PaymentMethod) {
-    if (IS_DEMO) { Alert.alert('Demo mode', `Payment recorded via ${method} (not saved).`); return; }
-    if (!household || !currentBill || !uid || !displayName) return;
-    const now = new Date().toISOString();
-    try { await recordPayment(household.id, { fromUserId: uid, fromDisplayName: displayName, amount: myShare, confirmedAt: now, billId: currentBill.id, method }); }
-    catch (e) { console.error('[Payments] recordPayment error:', e); }
-    addPayment({ fromUserId: uid, fromDisplayName: displayName, amount: myShare, confirmedAt: now, billId: currentBill.id, method });
-  }
-
-  function openApp(type: 'venmo' | 'zelle') {
-    setHasTappedPay(true);
-    setLastPayMethod(type);
-    const url = type === 'venmo'
-      ? `venmo://paycharge?txn=pay&recipients=${encodeURIComponent(ownerEmail)}&amount=${myShare}&note=Rent`
-      : 'zelle://';
-    if (IS_DEMO) { Alert.alert('Demo mode', `Would open: ${url}`); return; }
-    Linking.openURL(url).catch(() => Alert.alert(`${type === 'venmo' ? 'Venmo' : 'Zelle'} not found`, 'Please install the app.'));
-  }
-
-  function confirmMark(method: PaymentMethod, label: string) {
-    Alert.alert('Mark as Paid', `Confirm $${myShare.toLocaleString()} via ${label}?`, [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Confirm', onPress: () => doMarkPaid(method) },
-    ]);
-  }
-
-  function memberName(fromUserId: string) {
-    return members.find((m) => m.uid === fromUserId)?.displayName ?? fromUserId;
+  function handleLogPayment() {
+    if (IS_DEMO) {
+      Alert.alert('Demo Mode', 'Payment log is read-only in demo mode.');
+      return;
+    }
+    if (currentMonthPaid) {
+      Alert.alert('Already Recorded', 'You already have a payment recorded for this month.');
+      return;
+    }
+    if (!lease) return;
+    addPayment({
+      leaseId: lease.id,
+      month: currentMonth,
+      amount: lease.monthlyRent,
+      paidDate: new Date().toISOString().slice(0, 10),
+      method: 'other',
+      status: 'on_time',
+    });
+    Alert.alert('Recorded', 'Payment recorded for this month.');
   }
 
   return (
     <SafeAreaView style={s.container}>
       <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
-
         <View style={s.header}>
-          <Text style={s.title}>Pay + Ledger</Text>
+          <Text style={s.title}>Payment Log</Text>
           {IS_DEMO && <DemoBadge />}
         </View>
 
-        {/* SECTION 1 — Pay Now */}
-        <Text style={s.sectionLabel}>PAY NOW</Text>
-        <View style={s.card}>
-          <Text style={s.billLabel}>{dueLabel}</Text>
-          <Text style={s.billTotal}>${currentBill ? currentBill.amount.toLocaleString() : '—'} total</Text>
-          <View style={s.shareRow}>
-            <Text style={s.shareAmount}>${myShare.toLocaleString()}</Text>
-            <View style={[s.badge, isPaid ? s.badgePaid : s.badgeDue]}>
-              <Text style={[s.badgeText, { color: isPaid ? Colors.paid : Colors.warning }]}>
-                {isPaid ? 'Paid' : 'Due'}
-              </Text>
-            </View>
+        {/* Summary */}
+        <View style={s.summaryCard}>
+          <View style={s.summaryItem}>
+            <Text style={s.summaryValue}>{payments.length}</Text>
+            <Text style={s.summaryLabel}>Payments</Text>
           </View>
-
-          {!isPaid && <>
-            <View style={s.row}>
-              <TouchableOpacity style={[s.payBtn, s.venmo]} onPress={() => openApp('venmo')}>
-                <Text style={s.payBtnTxt}>💸 Venmo</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={[s.payBtn, s.zelle]} onPress={() => openApp('zelle')}>
-                <Text style={s.payBtnTxt}>🏦 Zelle</Text>
-              </TouchableOpacity>
-            </View>
-            {hasTappedPay && (
-              <TouchableOpacity style={s.markBtn} onPress={() => confirmMark(lastPayMethod ?? 'other', lastPayMethod ?? 'app')}>
-                <Text style={s.markBtnTxt}>Mark as Paid</Text>
-              </TouchableOpacity>
-            )}
-            <TouchableOpacity style={s.cashBtn} onPress={() => confirmMark('cash', 'Cash')}>
-              <Text style={s.cashBtnTxt}>Mark Paid (Cash)</Text>
-            </TouchableOpacity>
-          </>}
+          <View style={s.summaryDivider} />
+          <View style={s.summaryItem}>
+            <Text style={s.summaryValue}>
+              ${payments.reduce((sum, p) => sum + p.amount, 0).toLocaleString()}
+            </Text>
+            <Text style={s.summaryLabel}>Total Paid</Text>
+          </View>
+          <View style={s.summaryDivider} />
+          <View style={s.summaryItem}>
+            <Text style={[s.summaryValue, { color: Colors.success }]}>100%</Text>
+            <Text style={s.summaryLabel}>On Time</Text>
+          </View>
         </View>
 
-        {/* SECTION 2 — Payment History */}
-        <Text style={[s.sectionLabel, { marginTop: 24 }]}>PAYMENT HISTORY</Text>
-        <View style={s.histList}>
-          {visible.length === 0 && !hasMore
-            ? <Text style={s.emptyTxt}>No payments recorded yet.</Text>
-            : visible.map((p) => {
-                const name = memberName(p.fromUserId);
-                return (
-                  <View key={p.id} style={s.histRow}>
-                    <View style={[s.avatar, { backgroundColor: avatarColor(name) }]}>
-                      <Text style={s.avatarTxt}>{name.charAt(0).toUpperCase()}</Text>
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={s.histName}>{name}</Text>
-                      <Text style={s.histDate}>{fmtDate(p.confirmedAt ?? p.createdAt)}</Text>
-                    </View>
-                    <Text style={s.histIcon}>{methodIcon(p.method)}</Text>
-                    <Text style={s.histAmt}>${p.amount.toLocaleString()}</Text>
-                  </View>
-                );
-              })
-          }
-          {hasMore && (
-            <TouchableOpacity style={s.upgradeRow} onPress={() => setShowPaywall(true)}>
-              <Text style={s.upgradeTxt}>Upgrade for full history</Text>
-              <Text style={s.upgradeChev}>›</Text>
-            </TouchableOpacity>
-          )}
-        </View>
+        {/* Log button */}
+        <TouchableOpacity
+          style={[s.logBtn, currentMonthPaid && s.logBtnPaid]}
+          onPress={handleLogPayment}
+        >
+          <Text style={s.logBtnText}>
+            {currentMonthPaid ? '✓ This Month Recorded' : '+ Log Payment for This Month'}
+          </Text>
+        </TouchableOpacity>
 
+        {/* Payment list */}
+        <Text style={s.sectionLabel}>RECENT PAYMENTS</Text>
+        {payments.length === 0 ? (
+          <Text style={s.emptyText}>No payments recorded yet.</Text>
+        ) : (
+          payments.map((p) => (
+            <PaymentRow
+              key={p.id}
+              payment={p}
+              onReceiptTap={(uri) => setReceiptUri(uri)}
+            />
+          ))
+        )}
       </ScrollView>
-      <PaywallModal visible={showPaywall} onClose={() => setShowPaywall(false)} reason="See your complete payment history." />
+
+      {receiptUri && (
+        <ReceiptModal
+          uri={receiptUri}
+          visible={true}
+          onClose={() => setReceiptUri(null)}
+        />
+      )}
     </SafeAreaView>
   );
 }
 
 const s = StyleSheet.create({
-  container:  { flex: 1, backgroundColor: Colors.background },
-  scroll:     { paddingHorizontal: 20, paddingBottom: 48 },
-  header:     { flexDirection: 'row', alignItems: 'center', gap: 10, paddingTop: 8, paddingBottom: 20 },
-  title:      { fontSize: 26, fontWeight: '800', color: Colors.text },
-  sectionLabel: { fontSize: 11, fontWeight: '700', color: Colors.textMuted, letterSpacing: 1.2, marginBottom: 10 },
-  card:       { backgroundColor: Colors.surface, borderRadius: 16, padding: 20, gap: 8 },
-  billLabel:  { fontSize: 13, color: Colors.textSecondary, fontWeight: '600' },
-  billTotal:  { fontSize: 13, color: Colors.textMuted },
-  shareRow:   { flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 4 },
-  shareAmount:{ fontSize: 40, fontWeight: '900', color: Colors.text },
-  badge:      { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 },
-  badgePaid:  { backgroundColor: Colors.paid + '22' },
-  badgeDue:   { backgroundColor: Colors.warning + '22' },
-  badgeText:  { fontSize: 13, fontWeight: '700' },
-  row:        { flexDirection: 'row', gap: 10, marginTop: 6 },
-  payBtn:     { flex: 1, borderRadius: 12, paddingVertical: 14, alignItems: 'center' },
-  venmo:      { backgroundColor: '#5f2d91' },
-  zelle:      { backgroundColor: '#2563eb' },
-  payBtnTxt:  { color: Colors.white, fontWeight: '700', fontSize: 15 },
-  markBtn:    { backgroundColor: Colors.primary, borderRadius: 12, paddingVertical: 14, alignItems: 'center' },
-  markBtnTxt: { color: Colors.white, fontWeight: '700', fontSize: 15 },
-  cashBtn:    { borderWidth: 1, borderColor: Colors.border, borderRadius: 12, paddingVertical: 13, alignItems: 'center' },
-  cashBtnTxt: { color: Colors.textSecondary, fontWeight: '600', fontSize: 14 },
-  histList:   { gap: 6 },
-  histRow:    { flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.surface, borderRadius: 12, padding: 12, gap: 10 },
-  avatar:     { width: 38, height: 38, borderRadius: 19, justifyContent: 'center', alignItems: 'center' },
-  avatarTxt:  { color: Colors.white, fontWeight: '700', fontSize: 16 },
-  histName:   { fontSize: 14, fontWeight: '700', color: Colors.text },
-  histDate:   { fontSize: 12, color: Colors.textSecondary, marginTop: 1 },
-  histIcon:   { fontSize: 18 },
-  histAmt:    { fontSize: 15, fontWeight: '800', color: Colors.text, minWidth: 64, textAlign: 'right' },
-  upgradeRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: Colors.primary + '18', borderRadius: 12, padding: 14, borderWidth: 1, borderColor: Colors.primary + '44' },
-  upgradeTxt: { color: Colors.primary, fontWeight: '600', fontSize: 14 },
-  upgradeChev:{ color: Colors.primary, fontSize: 20, fontWeight: '700' },
-  emptyTxt:   { color: Colors.textMuted, fontSize: 14, paddingVertical: 20, textAlign: 'center' },
+  container: { flex: 1, backgroundColor: Colors.background },
+  scroll: { padding: 20, paddingBottom: 48 },
+  header: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 20 },
+  title: { fontSize: 26, fontWeight: '800', color: Colors.text },
+
+  summaryCard: {
+    backgroundColor: Colors.surface,
+    borderRadius: 16,
+    padding: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-around',
+    marginBottom: 16,
+  },
+  summaryItem: { alignItems: 'center', gap: 4 },
+  summaryValue: { fontSize: 24, fontWeight: '800', color: Colors.text },
+  summaryLabel: { fontSize: 12, color: Colors.textSecondary, fontWeight: '600' },
+  summaryDivider: { width: 1, height: 36, backgroundColor: Colors.border },
+
+  logBtn: {
+    backgroundColor: Colors.primary,
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  logBtnPaid: { backgroundColor: Colors.surface, borderWidth: 1, borderColor: Colors.success },
+  logBtnText: { color: Colors.white, fontWeight: '700', fontSize: 15 },
+
+  sectionLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: Colors.textMuted,
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+    marginBottom: 10,
+  },
+  emptyText: { color: Colors.textMuted, fontSize: 14, textAlign: 'center', paddingVertical: 20 },
+
+  row: {
+    backgroundColor: Colors.surface,
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  rowLeft: { flexDirection: 'row', alignItems: 'center', flex: 1, gap: 12 },
+  statusDot: { width: 10, height: 10, borderRadius: 5 },
+  rowInfo: { flex: 1 },
+  rowMonth: { fontSize: 15, fontWeight: '700', color: Colors.text },
+  rowMeta: { fontSize: 12, color: Colors.textSecondary, marginTop: 2 },
+  rowRight: { alignItems: 'flex-end', gap: 6 },
+  rowAmount: { fontSize: 16, fontWeight: '800', color: Colors.text },
+
+  receiptThumb: {
+    width: 44,
+    height: 44,
+    borderRadius: 8,
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  receiptImage: { width: '100%', height: '100%' },
+  receiptOverlay: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: '#00000088',
+    alignItems: 'center',
+    paddingVertical: 2,
+  },
+  receiptLabel: { color: Colors.white, fontSize: 9, fontWeight: '700' },
+
+  noReceipt: {
+    width: 44,
+    height: 44,
+    borderRadius: 8,
+    backgroundColor: Colors.background,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  noReceiptText: { fontSize: 8, color: Colors.textMuted, fontWeight: '600' },
 });

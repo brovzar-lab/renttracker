@@ -11,49 +11,53 @@ export default function TabLayout() {
           backgroundColor: Colors.surface,
           borderTopColor: Colors.border,
           borderTopWidth: 1,
-          height: 60,
+          height: 62,
           paddingBottom: 8,
         },
         tabBarActiveTintColor: Colors.primary,
         tabBarInactiveTintColor: Colors.textMuted,
-        tabBarLabelStyle: { fontSize: 11, fontWeight: '600' },
+        tabBarLabelStyle: { fontSize: 10, fontWeight: '600' },
       }}
     >
       <Tabs.Screen
         name="index"
         options={{
-          title: 'Home',
-          tabBarIcon: ({ color }) => <Text style={{ fontSize: 20, color }}>🏠</Text>,
-        }}
-      />
-      <Tabs.Screen
-        name="leases"
-        options={{
-          title: 'Household',
-          tabBarIcon: ({ color }) => <Text style={{ fontSize: 20, color }}>🏡</Text>,
-        }}
-      />
-      <Tabs.Screen
-        name="analytics"
-        options={{
-          title: 'Split',
-          tabBarIcon: ({ color }) => <Text style={{ fontSize: 20, color }}>✂️</Text>,
+          title: 'Lease',
+          tabBarIcon: ({ color }) => <Text style={{ fontSize: 20, color }}>📋</Text>,
         }}
       />
       <Tabs.Screen
         name="payments"
         options={{
-          title: 'Pay',
-          tabBarIcon: ({ color }) => <Text style={{ fontSize: 20, color }}>💸</Text>,
+          title: 'Payments',
+          tabBarIcon: ({ color }) => <Text style={{ fontSize: 20, color }}>💳</Text>,
         }}
       />
       <Tabs.Screen
-        name="profile"
+        name="reminders"
         options={{
-          title: 'Profile',
-          tabBarIcon: ({ color }) => <Text style={{ fontSize: 20, color }}>👤</Text>,
+          title: 'Reminders',
+          tabBarIcon: ({ color }) => <Text style={{ fontSize: 20, color }}>🔔</Text>,
         }}
       />
+      <Tabs.Screen
+        name="streak"
+        options={{
+          title: 'Streak',
+          tabBarIcon: ({ color }) => <Text style={{ fontSize: 20, color }}>🔥</Text>,
+        }}
+      />
+      <Tabs.Screen
+        name="export"
+        options={{
+          title: 'Export',
+          tabBarIcon: ({ color }) => <Text style={{ fontSize: 20, color }}>📤</Text>,
+        }}
+      />
+      {/* Legacy routes — hidden from tab bar */}
+      <Tabs.Screen name="leases" options={{ href: null }} />
+      <Tabs.Screen name="analytics" options={{ href: null }} />
+      <Tabs.Screen name="profile" options={{ href: null }} />
     </Tabs>
   );
 }

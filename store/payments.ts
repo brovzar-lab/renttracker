@@ -1,16 +1,14 @@
 import { create } from 'zustand';
-import { DEMO_PAYMENTS, IS_DEMO } from '../constants/demo';
-import type { Payment, PaymentMethod } from '../constants/demo';
+import { IS_DEMO, DEMO_PAYMENTS } from '../constants/demo';
+import type { PaymentRecord, PaymentMethod } from '../constants/demo';
 
-export type { Payment, PaymentMethod };
+export type { PaymentRecord, PaymentMethod };
 
 interface PaymentsState {
-  payments: Payment[];
-  setPayments: (payments: Payment[]) => void;
-  addPayment: (payment: Omit<Payment, 'id' | 'createdAt'>) => Payment;
-  getPaymentsForBill: (billId: string) => Payment[];
-  getPaymentsForUser: (userId: string) => Payment[];
-  hasPaidBill: (userId: string, billId: string) => boolean;
+  payments: PaymentRecord[];
+  setPayments: (payments: PaymentRecord[]) => void;
+  addPayment: (payment: Omit<PaymentRecord, 'id' | 'createdAt'>) => PaymentRecord;
+  hasPaymentForMonth: (month: string) => boolean;
 }
 
 export const usePaymentsStore = create<PaymentsState>((set, get) => ({
@@ -20,7 +18,7 @@ export const usePaymentsStore = create<PaymentsState>((set, get) => ({
 
   addPayment: (payment) => {
     const ts = new Date().toISOString();
-    const newPayment: Payment = {
+    const newPayment: PaymentRecord = {
       ...payment,
       id: 'pay-' + Date.now().toString(),
       createdAt: ts,
@@ -29,12 +27,6 @@ export const usePaymentsStore = create<PaymentsState>((set, get) => ({
     return newPayment;
   },
 
-  getPaymentsForBill: (billId) =>
-    get().payments.filter((p) => p.billId === billId),
-
-  getPaymentsForUser: (userId) =>
-    get().payments.filter((p) => p.fromUserId === userId),
-
-  hasPaidBill: (userId, billId) =>
-    get().payments.some((p) => p.fromUserId === userId && p.billId === billId),
+  hasPaymentForMonth: (month) =>
+    get().payments.some((p) => p.month === month),
 }));

@@ -13,15 +13,16 @@ import {
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { signInWithEmailAndPassword } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
 import { Colors } from '../../constants/colors';
-import { IS_DEMO, DEMO_USER } from '../../constants/demo';
-import { auth, db } from '../../lib/firebase';
+import { IS_DEMO, DEMO_USER, DEMO_LEASE } from '../../constants/demo';
+import { auth } from '../../lib/firebase';
 import { useAuthStore } from '../../store/auth';
+import { useLeaseStore } from '../../store/lease';
 
 export default function LoginScreen() {
   const router = useRouter();
   const setUser = useAuthStore((s) => s.setUser);
+  const setLease = useLeaseStore((s) => s.setLease);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -29,17 +30,16 @@ export default function LoginScreen() {
 
   const handleLogin = async () => {
     if (IS_DEMO) {
-      Alert.alert('Demo Mode', 'Demo mode — not saved');
+      Alert.alert('Demo Mode', 'Logging in as demo user.');
       setUser({
         uid: DEMO_USER.uid,
         email: DEMO_USER.email,
         displayName: DEMO_USER.displayName,
         isPro: DEMO_USER.isPro,
-        notificationsEnabled: DEMO_USER.notificationsEnabled,
-        reminderDaysBefore: DEMO_USER.reminderDaysBefore,
-        totalStorageBytes: DEMO_USER.totalStorageBytes,
+        leaseId: DEMO_USER.leaseId,
         isAuthenticated: true,
       });
+      setLease(DEMO_LEASE);
       return;
     }
 
@@ -48,20 +48,12 @@ export default function LoginScreen() {
     setLoading(true);
     try {
       const cred = await signInWithEmailAndPassword(auth, email.trim(), password);
-      if (db) {
-        const snap = await getDoc(doc(db, `users/${cred.user.uid}/profile/${cred.user.uid}`));
-        if (snap.exists()) {
-          const data = snap.data();
-          setUser({
-            uid: cred.user.uid,
-            email: cred.user.email,
-            notificationsEnabled: data.notificationsEnabled ?? false,
-            reminderDaysBefore: data.reminderDaysBefore ?? 3,
-            totalStorageBytes: data.totalStorageBytes ?? 0,
-            isAuthenticated: true,
-          });
-        }
-      }
+      setUser({
+        uid: cred.user.uid,
+        email: cred.user.email,
+        displayName: cred.user.displayName,
+        isAuthenticated: true,
+      });
     } catch (e: unknown) {
       setError(friendlyError((e as { code?: string }).code ?? ''));
     } finally {
@@ -71,7 +63,10 @@ export default function LoginScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <KeyboardAvoidingView style={styles.inner} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <KeyboardAvoidingView
+        style={styles.inner}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
         <TouchableOpacity onPress={() => router.back()} style={styles.back}>
           <Text style={styles.backText}>← Back</Text>
         </TouchableOpacity>

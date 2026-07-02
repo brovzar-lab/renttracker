@@ -13,4 +13,3 @@ web-build/
 .env.local
 GoogleService-Info.plist
 google-services.json
-.vercel

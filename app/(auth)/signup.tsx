@@ -14,15 +14,18 @@ import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { Colors } from '../../constants/colors';
-import { IS_DEMO, DEMO_USER } from '../../constants/demo';
+import { IS_DEMO, DEMO_USER, DEMO_LEASE } from '../../constants/demo';
 import { auth } from '../../lib/firebase';
 import { createUserProfile } from '../../lib/firestore';
 import { useAuthStore } from '../../store/auth';
+import { useLeaseStore } from '../../store/lease';
 
 export default function SignUpScreen() {
   const router = useRouter();
   const setUser = useAuthStore((s) => s.setUser);
+  const setLease = useLeaseStore((s) => s.setLease);
   const [email, setEmail] = useState('');
+  const [name, setName] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -30,14 +33,16 @@ export default function SignUpScreen() {
 
   const handleSignUp = async () => {
     if (IS_DEMO) {
-      Alert.alert('Demo Mode', 'Demo mode — not saved');
+      Alert.alert('Demo Mode', 'Signing up as demo user.');
       setUser({
         uid: DEMO_USER.uid,
         email: DEMO_USER.email,
         displayName: DEMO_USER.displayName,
         isPro: DEMO_USER.isPro,
+        leaseId: DEMO_USER.leaseId,
         isAuthenticated: true,
       });
+      setLease(DEMO_LEASE);
       return;
     }
 
@@ -55,13 +60,11 @@ export default function SignUpScreen() {
     setLoading(true);
     try {
       const cred = await createUserWithEmailAndPassword(auth, email.trim(), password);
-      await createUserProfile(cred.user.uid, cred.user.email);
+      await createUserProfile(cred.user.uid, name.trim() || email.trim(), cred.user.email ?? '');
       setUser({
         uid: cred.user.uid,
         email: cred.user.email,
-        notificationsEnabled: false,
-        reminderDaysBefore: 3,
-        totalStorageBytes: 0,
+        displayName: name.trim() || null,
         isAuthenticated: true,
       });
     } catch (e: unknown) {
@@ -73,7 +76,10 @@ export default function SignUpScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <KeyboardAvoidingView style={styles.inner} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <KeyboardAvoidingView
+        style={styles.inner}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
         <TouchableOpacity onPress={() => router.back()} style={styles.back}>
           <Text style={styles.backText}>← Back</Text>
         </TouchableOpacity>
@@ -81,6 +87,15 @@ export default function SignUpScreen() {
         <Text style={styles.title}>Create account</Text>
 
         <View style={styles.form}>
+          <TextInput
+            style={styles.input}
+            placeholder="Full name"
+            placeholderTextColor={Colors.textMuted}
+            value={name}
+            onChangeText={setName}
+            autoCapitalize="words"
+            autoCorrect={false}
+          />
           <TextInput
             style={styles.input}
             placeholder="Email"

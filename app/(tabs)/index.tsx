@@ -1,221 +1,254 @@
-import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Alert, Linking } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Colors } from '../../constants/colors';
 import { IS_DEMO } from '../../constants/demo';
 import DemoBadge from '../../components/DemoBadge';
 import { useAuthStore } from '../../store/auth';
-import { useHouseholdStore } from '../../store/household';
-import { usePaymentsStore } from '../../store/payments';
+import { useLeaseStore } from '../../store/lease';
+import { signOut } from 'firebase/auth';
+import { auth } from '../../lib/firebase';
 
-function getDaysUntil(dateStr: string): number {
-  const target = new Date(dateStr + 'T00:00:00');
+function formatDate(iso: string): string {
+  return new Date(iso + 'T00:00:00').toLocaleDateString('en-US', {
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric',
+  });
+}
+
+function daysUntilDue(dueDay: number): number {
   const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  return Math.ceil((target.getTime() - today.getTime()) / 86400000);
+  const thisMonth = new Date(today.getFullYear(), today.getMonth(), dueDay);
+  if (thisMonth <= today) {
+    const nextMonth = new Date(today.getFullYear(), today.getMonth() + 1, dueDay);
+    return Math.ceil((nextMonth.getTime() - today.getTime()) / 86400000);
+  }
+  return Math.ceil((thisMonth.getTime() - today.getTime()) / 86400000);
 }
 
-function formatCurrency(amount: number): string {
-  return amount.toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0 });
-}
-
-export default function HomeScreen() {
-  const uid = useAuthStore((s) => s.uid);
+export default function LeaseScreen() {
   const displayName = useAuthStore((s) => s.displayName);
-  const household = useHouseholdStore((s) => s.household);
-  const members = useHouseholdStore((s) => s.members);
-  const currentBill = useHouseholdStore((s) => s.currentBill);
-  const payments = usePaymentsStore((s) => s.payments);
+  const signOutStore = useAuthStore((s) => s.signOut);
+  const lease = useLeaseStore((s) => s.lease);
+  const updateLease = useLeaseStore((s) => s.updateLease);
 
-  const firstName = displayName ? displayName.split(' ')[0] : 'there';
-  const myMember = members.find((m) => m.uid === uid);
+  const firstName = displayName?.split(' ')[0] ?? 'Jordan';
 
-  const hasPaid = currentBill
-    ? payments.some((p) => p.fromUserId === uid && p.billId === currentBill.id)
-    : false;
-
-  const roommateStatuses = members
-    .filter((m) => m.uid !== uid)
-    .map((m) => ({
-      ...m,
-      paid: currentBill
-        ? payments.some((p) => p.fromUserId === m.uid && p.billId === currentBill.id)
-        : false,
-    }));
-
-  const daysUntil = currentBill ? getDaysUntil(currentBill.dueDate) : 0;
-  const countdownColor =
-    daysUntil > 7 ? Colors.success : daysUntil >= 1 ? Colors.warning : Colors.danger;
-  const countdownLabel =
-    daysUntil < 0
-      ? 'Overdue'
-      : daysUntil === 0
-      ? 'Due today'
-      : `${daysUntil} day${daysUntil !== 1 ? 's' : ''} until due`;
-
-  function openVenmo(): void {
-    if (!myMember || !currentBill) return;
-    const landlordEmail = household?.ownerId ?? '';
-    const url = `venmo://paycharge?txn=pay&recipients=${encodeURIComponent(landlordEmail)}&amount=${myMember.shareAmount}&note=Rent`;
+  function handleSendInvite() {
     if (IS_DEMO) {
-      Alert.alert('Demo Mode', `Would open Venmo to pay ${formatCurrency(myMember.shareAmount)}`);
-    } else {
-      Linking.openURL(url).catch(() =>
-        Alert.alert('Venmo not installed', 'Please install Venmo to use this feature.')
-      );
+      Alert.alert('Demo Mode', 'Invite would be sent to Sarah Chen in live mode.');
+      return;
     }
+    Alert.alert('Invite Sent', `Invitation sent to ${lease?.landlordEmail ?? 'landlord'}.`);
+    updateLease({ landlordInviteStatus: 'active' });
   }
 
-  function openZelle(): void {
-    if (IS_DEMO) {
-      Alert.alert('Demo Mode', 'Would open Zelle to pay rent');
-    } else {
-      Linking.openURL('zelle://').catch(() =>
-        Alert.alert('Zelle not installed', 'Please install Zelle to use this feature.')
-      );
-    }
+  function handleSignOut() {
+    Alert.alert('Sign Out', 'Are you sure?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Sign Out',
+        style: 'destructive',
+        onPress: async () => {
+          if (!IS_DEMO && auth) await signOut(auth);
+          signOutStore();
+        },
+      },
+    ]);
   }
 
-  // Empty state
-  if (!household) {
+  if (!lease) {
     return (
       <SafeAreaView style={styles.container}>
-        {IS_DEMO && (
-          <View style={styles.demoRow}>
-            <DemoBadge />
-          </View>
-        )}
+        {IS_DEMO && <View style={styles.badgeRow}><DemoBadge /></View>}
         <View style={styles.emptyWrap}>
-          <View style={styles.emptyCard}>
-            <Text style={styles.emptyTitle}>No household yet</Text>
-            <Text style={styles.emptyBody}>
-              Create or join a household to start tracking your rent split with roommates.
-            </Text>
-          </View>
+          <Text style={styles.emptyTitle}>No lease set up yet</Text>
+          <Text style={styles.emptyBody}>Add your lease details to get started.</Text>
         </View>
       </SafeAreaView>
     );
   }
 
+  const days = daysUntilDue(lease.dueDay);
+  const dueColor = days <= 3 ? Colors.danger : days <= 7 ? Colors.warning : Colors.success;
+
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-        {IS_DEMO && (
-          <View style={styles.demoRow}>
-            <DemoBadge />
-          </View>
-        )}
+        {IS_DEMO && <View style={styles.badgeRow}><DemoBadge /></View>}
 
-        {/* Greeting */}
+        {/* Header */}
         <View style={styles.header}>
           <Text style={styles.greeting}>Hey, {firstName}!</Text>
-          <Text style={styles.householdName}>{household.name}</Text>
+          <Text style={styles.unit}>{lease.unit} · {lease.address}</Text>
         </View>
 
-        {/* Current bill card */}
-        {currentBill && (
-          <View style={styles.billCard}>
-            <Text style={styles.billLabel}>{currentBill.month} Rent</Text>
-            <Text style={styles.billTotal}>{formatCurrency(currentBill.amount)}</Text>
-            <View style={[styles.countdownBadge, { backgroundColor: countdownColor + '22' }]}>
-              <Text style={[styles.countdownText, { color: countdownColor }]}>{countdownLabel}</Text>
+        {/* Rent card */}
+        <View style={styles.card}>
+          <Text style={styles.cardLabel}>MONTHLY RENT</Text>
+          <Text style={styles.rentAmount}>${lease.monthlyRent.toLocaleString()}</Text>
+          <View style={[styles.dueBadge, { backgroundColor: dueColor + '22' }]}>
+            <Text style={[styles.dueText, { color: dueColor }]}>
+              Due in {days} day{days !== 1 ? 's' : ''}
+            </Text>
+          </View>
+          <Text style={styles.dueLine}>Due on the {lease.dueDay}{ordinal(lease.dueDay)} of each month</Text>
+        </View>
+
+        {/* Lease period */}
+        <View style={styles.card}>
+          <Text style={styles.cardLabel}>LEASE PERIOD</Text>
+          <View style={styles.periodRow}>
+            <View style={styles.periodItem}>
+              <Text style={styles.periodLabel}>Start</Text>
+              <Text style={styles.periodValue}>{formatDate(lease.leaseStart)}</Text>
             </View>
-
-            {/* Your share */}
-            {myMember && (
-              <View style={styles.shareRow}>
-                <View>
-                  <Text style={styles.shareLabel}>Your share</Text>
-                  <Text style={styles.shareAmount}>{formatCurrency(myMember.shareAmount)}</Text>
-                  <Text style={styles.sharePercent}>{myMember.sharePercent}% of total</Text>
-                </View>
-                <View style={[styles.statusBadge, { backgroundColor: hasPaid ? Colors.paid + '22' : Colors.warning + '22' }]}>
-                  <Text style={[styles.statusText, { color: hasPaid ? Colors.paid : Colors.warning }]}>
-                    {hasPaid ? 'Paid' : 'Due'}
-                  </Text>
-                </View>
-              </View>
-            )}
+            <Text style={styles.periodArrow}>→</Text>
+            <View style={styles.periodItem}>
+              <Text style={styles.periodLabel}>End</Text>
+              <Text style={styles.periodValue}>{formatDate(lease.leaseEnd)}</Text>
+            </View>
           </View>
-        )}
+        </View>
 
-        {/* Roommate statuses */}
-        {roommateStatuses.length > 0 && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Roommates</Text>
-            {roommateStatuses.map((r) => (
-              <View key={r.uid} style={styles.roommateRow}>
-                <View style={styles.avatar}>
-                  <Text style={styles.avatarText}>{r.displayName.charAt(0).toUpperCase()}</Text>
-                </View>
-                <View style={styles.roommateInfo}>
-                  <Text style={styles.roommateName}>{r.displayName}</Text>
-                  <Text style={styles.roommateAmount}>{formatCurrency(r.shareAmount)}</Text>
-                </View>
-                <Text style={[styles.roommateStatus, { color: r.paid ? Colors.paid : Colors.warning }]}>
-                  {r.paid ? '✓ Paid' : '○ Unpaid'}
-                </Text>
-              </View>
-            ))}
+        {/* Landlord */}
+        <View style={styles.card}>
+          <Text style={styles.cardLabel}>LANDLORD</Text>
+          <View style={styles.landlordRow}>
+            <View style={styles.landlordAvatar}>
+              <Text style={styles.landlordInitial}>
+                {lease.landlordName.charAt(0)}
+              </Text>
+            </View>
+            <View style={styles.landlordInfo}>
+              <Text style={styles.landlordName}>{lease.landlordName}</Text>
+              <Text style={styles.landlordEmail}>{lease.landlordEmail}</Text>
+            </View>
+            <View
+              style={[
+                styles.inviteBadge,
+                {
+                  backgroundColor:
+                    lease.landlordInviteStatus === 'pending'
+                      ? Colors.warning + '22'
+                      : Colors.success + '22',
+                },
+              ]}
+            >
+              <Text
+                style={[
+                  styles.inviteBadgeText,
+                  {
+                    color:
+                      lease.landlordInviteStatus === 'pending'
+                        ? Colors.warning
+                        : Colors.success,
+                  },
+                ]}
+              >
+                {lease.landlordInviteStatus === 'pending' ? 'Pending' : 'Active'}
+              </Text>
+            </View>
           </View>
-        )}
-
-        {/* Pay buttons — only shown if not yet paid */}
-        {!hasPaid && currentBill && (
-          <View style={styles.paySection}>
-            <TouchableOpacity style={styles.venmoBtn} onPress={openVenmo}>
-              <Text style={styles.venmoBtnText}>Pay via Venmo</Text>
+          {lease.landlordInviteStatus === 'pending' && (
+            <TouchableOpacity style={styles.inviteBtn} onPress={handleSendInvite}>
+              <Text style={styles.inviteBtnText}>Resend Invite to Landlord</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.zelleBtn} onPress={openZelle}>
-              <Text style={styles.zelleBtnText}>Pay via Zelle</Text>
-            </TouchableOpacity>
-          </View>
-        )}
+          )}
+        </View>
+
+        {/* Sign out */}
+        <TouchableOpacity style={styles.signOutBtn} onPress={handleSignOut}>
+          <Text style={styles.signOutText}>Sign Out</Text>
+        </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>
   );
 }
 
+function ordinal(n: number): string {
+  if (n >= 11 && n <= 13) return 'th';
+  return ['th', 'st', 'nd', 'rd'][n % 10] ?? 'th';
+}
+
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
   scroll: { padding: 20, paddingBottom: 40 },
-  demoRow: { marginBottom: 16, alignItems: 'center' },
-  header: { marginBottom: 24 },
+  badgeRow: { marginBottom: 12 },
+  header: { marginBottom: 20 },
   greeting: { fontSize: 26, fontWeight: '800', color: Colors.text },
-  householdName: { fontSize: 14, color: Colors.textSecondary, marginTop: 4 },
-  billCard: {
+  unit: { fontSize: 14, color: Colors.textSecondary, marginTop: 4 },
+  card: {
     backgroundColor: Colors.surface,
     borderRadius: 16,
-    padding: 20,
-    marginBottom: 24,
+    padding: 18,
+    marginBottom: 14,
     gap: 8,
   },
-  billLabel: { fontSize: 13, color: Colors.textSecondary, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5 },
-  billTotal: { fontSize: 36, fontWeight: '800', color: Colors.text },
-  countdownBadge: { alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8 },
-  countdownText: { fontSize: 13, fontWeight: '700' },
-  shareRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 8, paddingTop: 16, borderTopWidth: 1, borderTopColor: Colors.border },
-  shareLabel: { fontSize: 12, color: Colors.textSecondary, fontWeight: '600' },
-  shareAmount: { fontSize: 22, fontWeight: '800', color: Colors.text, marginTop: 2 },
-  sharePercent: { fontSize: 12, color: Colors.textMuted, marginTop: 2 },
-  statusBadge: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10 },
-  statusText: { fontSize: 14, fontWeight: '800' },
-  section: { marginBottom: 24 },
-  sectionTitle: { fontSize: 16, fontWeight: '700', color: Colors.text, marginBottom: 12 },
-  roommateRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: Colors.border },
-  avatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: Colors.primary, alignItems: 'center', justifyContent: 'center', marginRight: 12 },
-  avatarText: { color: Colors.white, fontWeight: '700', fontSize: 16 },
-  roommateInfo: { flex: 1 },
-  roommateName: { fontSize: 14, color: Colors.text, fontWeight: '600' },
-  roommateAmount: { fontSize: 12, color: Colors.textSecondary, marginTop: 2 },
-  roommateStatus: { fontSize: 13, fontWeight: '700' },
-  paySection: { gap: 12 },
-  venmoBtn: { backgroundColor: '#5c36d4', borderRadius: 14, padding: 16, alignItems: 'center' },
-  venmoBtnText: { color: Colors.white, fontWeight: '700', fontSize: 16 },
-  zelleBtn: { backgroundColor: '#0073e6', borderRadius: 14, padding: 16, alignItems: 'center' },
-  zelleBtnText: { color: Colors.white, fontWeight: '700', fontSize: 16 },
-  emptyWrap: { flex: 1, justifyContent: 'center', padding: 20 },
-  emptyCard: { backgroundColor: Colors.surface, borderRadius: 16, padding: 24, alignItems: 'center', gap: 12 },
-  emptyTitle: { fontSize: 18, fontWeight: '700', color: Colors.text },
-  emptyBody: { fontSize: 14, color: Colors.textSecondary, textAlign: 'center', lineHeight: 20 },
+  cardLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: Colors.textMuted,
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+  },
+  rentAmount: { fontSize: 42, fontWeight: '900', color: Colors.text },
+  dueBadge: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+  },
+  dueText: { fontSize: 13, fontWeight: '700' },
+  dueLine: { fontSize: 13, color: Colors.textSecondary },
+  periodRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 4,
+  },
+  periodItem: { flex: 1 },
+  periodLabel: { fontSize: 12, color: Colors.textMuted, fontWeight: '600' },
+  periodValue: { fontSize: 14, color: Colors.text, fontWeight: '700', marginTop: 2 },
+  periodArrow: { fontSize: 18, color: Colors.textMuted, paddingHorizontal: 8 },
+  landlordRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 4 },
+  landlordAvatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: Colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  landlordInitial: { color: Colors.white, fontWeight: '800', fontSize: 18 },
+  landlordInfo: { flex: 1 },
+  landlordName: { fontSize: 15, fontWeight: '700', color: Colors.text },
+  landlordEmail: { fontSize: 12, color: Colors.textSecondary, marginTop: 2 },
+  inviteBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+  },
+  inviteBadgeText: { fontSize: 12, fontWeight: '700' },
+  inviteBtn: {
+    borderWidth: 1,
+    borderColor: Colors.warning,
+    borderRadius: 10,
+    paddingVertical: 10,
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  inviteBtnText: { color: Colors.warning, fontWeight: '600', fontSize: 14 },
+  signOutBtn: {
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  signOutText: { color: Colors.textSecondary, fontWeight: '600', fontSize: 14 },
+  emptyWrap: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 40 },
+  emptyTitle: { fontSize: 18, fontWeight: '700', color: Colors.text, marginBottom: 8 },
+  emptyBody: { fontSize: 14, color: Colors.textSecondary, textAlign: 'center' },
 });
